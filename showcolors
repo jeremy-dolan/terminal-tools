@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+
+"""Show ANSI control sequences for color (and other text decorations)"""
+
+###
+# Author: Jeremy Dolan
+# Rewritten in Python with better color cube presentation - March 2023
+#
+# This work is public domain. The author hereby releases all copyright. «jd»
+# This software is provided free and “as is”, without warranties of any kind,
+# express or implied, including but not limited to the warranties of fitness
+# for a particular purpose or merchantability. In no event shall the author be
+# liable for any damages arising in any way out of the use of this software.
+###
+
+r"""
+ANSI SGR ("Select Graphic Rendition") parameters are of the form:
+    ESC + '[' + semicolon-separated-list-of-numerical-codes + 'm'
+
+Where ESC is the escape control code, located at:
+   033     oct
+   0x1b    hex
+   27      dec
+   001b    Unicode encoding
+
+## INTERACTIVE USE ##
+In many interactive terminals, control-V will enter control character insertion
+mode. This can be followed by Escape or control-[ to insert the ESC control
+character. For thorough documentation on other terminal control codes, see the
+Linux console_codes(4) manpage: `man 4 console_codes`
+
+## ECHO ##
+Using escaped character codes with the echo command is system-dependent. Most
+implementations will replace the sequence \0NNN with the character at octal
+value NNN. However, some implementations require '-e' to interpret backslash
+escapes (e.g. GNU utilities), while others have no support at all (e.g. macOS).
+
+    POSIX.1 specification   backslash interpretation is "implementation-defined"
+                            https://pubs.opengroup.org/onlinepubs/009604499/utilities/echo.html
+    POSIX.1 XSI extension   \0NNN  replace with the 8-bit value given by octal NNN (0 to 3 digits)
+    macOS /bin/echo         no support
+    GNU coreutils /bin/echo (-e flag required to interpret escapes)
+                            \0NNN  byte with octal value NNN (0 to 3 digits)
+                            \NNN   byte with octal value NNN (1 to 3 digits; unique to coreutils)
+                            \xHH   byte with hex value HH (1 to 2 digits)
+    GNU bash builtin echo   (-e flag required to interpret escapes)
+                            \0NNN  byte with octal value NNN (0 to 3 digits)
+                            \xHH   byte with hex value HH (1 to 2 digits)
+                            \uHHHH Unicode character with 16-bit hex value HHHH (1 to 4 digits)
+                            \UHHHHHHHH Unicode character with given 32-bit hex value (1 to 8 digits)
+    AT&T ksh builtin echo   (-e flag required to interpret escapes)
+                            \0NNN  character code in octal (0 to 3 digits; undocumented)
+    zsh builtin echo        (-e flag is NOT required, but can be given and will
+                                   override various bash compatibility modes)
+                            \0NNN  character code in octal
+                            \xHH   character code in hex (1 to 2 digits)
+                            \0xHH  character code in hex (1 to 2 digits; unique to zsh)
+                            \uHHHH unicode character code in hexadecimal (1 to 4 digits)
+                            \UHHHHHHHH Unicode character with given 32-bit hex value (1 to 8 digits)
+    dash builtin echo       \0NNN  character code in octal (POSIX compliant) 
+
+*: For implementations that specify NNN may be "zero" to three digits, zero
+   digits will print the NUL character; i.e., \0 == \00 == \000 == \0000
+*: Three octal digits allow for 9 bits of information (3 bits per octal digit).
+   If NNN is a 9-bit value, the ninth bit is ignored; e.g., \544 == \144
+
+## PRINTF ##
+printf(1) is a more portable solution for printing control characters. E.g., 
+POSIX/IEEE Std 1003.1-2017, FreeBSD, Linux, and macOS consistently interpret:
+   \ooo   write the byte whose value is the 1-, 2-, or 3-digit octal number ooo
+https://pubs.opengroup.org/onlinepubs/9699919799/utilities/printf.html
+https://man.freebsd.org/cgi/man.cgi?query=printf&manpath=FreeBSD+12.0-RELEASE
+https://www.gnu.org/software/coreutils/manual/html_node/printf-invocation.html
+
+
+## LINKS ##
+General overview:
+    https://en.wikipedia.org/wiki/ANSI_escape_code
+Manual for xterm's control sequences; comprehensive documentation:
+    https://invisible-island.net/xterm/ctlseqs/ctlseqs.html
+Great tutorial of not just color control sequences, but the whole gamut:
+    https://www.lihaoyi.com/post/BuildyourownCommandLinewithANSIescapecodes.html
+Nice organization of the 256-color colorspace:
+    http://www.calmar.ws/vim/256-xterm-24bit-rgb-color-chart.html
+"""
+
+
+def print_underlined(s: str):
+    print(f'\u001b[4m{s}\u001b[m')
+
+def demo_color(code: str):
+    print(f'\u001b[{code}m {code.ljust(3)} ', end='')
+
+def demo256color(code: int):
+    print(f' \u001b[38;5;{code}m{str(code).ljust(3)}', end='')
+
+def demo24bitcolor(r,g,b):
+    print(f' \u001b[38;2;{r};{g};{b}mR:{r} G:{g} B:{b}', end='')
+
+
+print_underlined('8-color terminals')
+print('Accessed with \\033[{30..37}m (fore) and \\033[{40..47}m (back)')
+for i in (3, 4):
+    for j in range(8):
+        demo_color(str(i) + str(j))
+    print('\u001b[m')
+print()
+
+
+print_underlined('16-color terminals')
+print('Accessed with \\033[{90..97}m (fore) and \\033[{100..107}m (back)')
+# It is said: Prior to the aixterm spec, brighter colors were accessed by using
+#     the colors above combined with the bold text attribute.
+# Default behavior in Terminal.app: same colors in a bolded font. Enable the
+#     'Use bright colors for bold text' option in Preferences->Profiles
+for i in (9, 10):
+    for j in range(8):
+        demo_color(str(i) + str(j))
+    print('\u001b[m')
+print()
+
+
+print_underlined('256-color terminals')
+print('Accessed with \\033[38;5;{0..255}m (fore) and \\033[48;5;{0..255}m (back)')
+print('The 16 colors above, a 6x6x6 cubic colorspace, and a 24-step grayscale gradient')
+# Display the original 16 ANSI colors as 2 rows of 8
+for i in range(2):
+    for j in range(8):
+        demo256color(8*i + j)
+    print()
+
+# The middle 216 colors are arranged as a 6x6x6 cubic RGB colorspace
+# To display it compactly, we display three 6x6 z-slices per row:
+# 2 rows of slices, 6 lines per slice, 3 slices per line, 6 colors per slice 
+for row in range(2):
+    for line in range(6):
+        for z_slice in range(3):
+            for color in range(6):
+                demo256color(16 + 108*row + 6*line + 36*z_slice + color)
+            # add spacing between slices, or a new line after the third slice:
+            print(end='  ' if z_slice<2 else '\n')
+
+# The final 24 colors are a dark-to-light grayscale gradient; display as 2 rows of 12
+for i in range(2):
+    for j in range(12):
+        demo256color(232 + 12*i + j)
+    print()
+print('\u001b[m')
+
+
+print_underlined('24-bit-color terminals')
+print('Accessed with \\033[38;2;<R>;<G>;<B>m (fore) and \\033[48;2;<R>;<G>;<B>m (back)')
+print('Implemented in most modern *nix terminal emulators; not in OS X Terminal.app')
+# TODO: print a couple of lines of smooth gradients as a visual test
+# https://github.com/termstandard/colors
+# https://gist.github.com/lifepillar/09a44b8cf0f9397465614e622979107f
+# https://unix.stackexchange.com/questions/404414/print-true-color-24-bit-test-pattern
+demo24bitcolor(192,16,16)
+print(end=' (red)   ')
+demo24bitcolor(16,192,16)
+print(end=' (green)   ')
+demo24bitcolor(16,16,192)
+print(end=' (blue)')
+print('\u001b[m\n')
+
+
+print_underlined('Other graphical control sequences')
+print('Accessed with \\033[{0..9}m')
+print('0 is the default, thus ^[[m also resets; 6 is rarely implemented')
+print(' 0: reset\t1: \u001b[1mbold\u001b[m\t\t2: \u001b[2mdim\u001b[m\t\t'
+       '3: \u001b[3mitalics\u001b[m\t4: \u001b[4munderline\u001b[m')
+print(' 5: \u001b[5mblink\u001b[m\t6: \u001b[6mfast-blink\u001b[m\t'
+       '7: \u001b[7minverse\u001b[m\t8: \u001b[8mhidden\u001b[m\t'
+       '9: \u001b[9mstrike\u001b[m')

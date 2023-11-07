@@ -1,0 +1,90 @@
+#!/bin/bash
+
+TITLE="flac2mp3"
+DESCR="convert flac files to high-quality VBR mp3"
+AUTHR="Jeremy Dolan"
+USAGE="Usage: flac2mp3 file1.flac [file2.flac ...]"
+NOTE1="Note: most metadata is preserved, with the notable exception of lyrics"
+NOTE2="      input file(s) must all end in '.flac'"
+NOTE3="      output is to the corresondingly named '.mp3' file(s)"
+
+# Last updated 2022.11.22 for ffmpeg 5.1.2
+# This work is public domain. The author hereby releases all copyright. «jd»
+# This software is provided free and "as is", without warranties of any kind,
+# express or implied, including but not limited to the warranties of fitness
+# for a particular purpose or merchantability. In no event shall the author be
+# liable for any damages arising in any way out of the use of this software.
+
+
+# ** NOTE ON LYRICS METADATA DATA LOSS **
+# !! LYRICS DATA IN FLAC FILES ARE NOT PROPERLY ADDED TO MP3 FILES !!
+#
+# It appears ffmpeg is writing improper ID3v2 lyrics metadata. ffmpeg correctly
+# identifies lyrics in FLAC files, but when it saves them as ID3v2 "USLT" tags
+# ("unsynced lyrics") in the MP3 file, it seems that it fails to specify a
+# language (e.g., "eng"), which is a required part of a USLT tag. Neither Apple
+# Music nor the eyeD3 utility recognize the resulting lyrics data.
+#  - I have tried with both -id3v2_version 3 and -id3v2_version 4.
+#  - cf. https://trac.ffmpeg.org/ticket/8795
+#        ffmpeg behavior seems improved since this ticket, but still incorrect?
+#  - Helpful testing kit: pip install "eyeD3"
+#
+# I have officially spent Too Much Time on this and give up for now.
+
+
+### sanity checks ###
+# check that some files are specified
+if [[ $# == 0 || $1 == "-h" || $1 == "--help" ]]; then
+    echo -e "$TITLE - $DESCR"
+    echo -e "$USAGE\n$NOTE1\n$NOTE2\n$NOTE3"
+    exit -2
+fi
+# for all specified files, check that
+#     1) they exist,
+#     2) they end in .flac,
+#     3) there is no corresondingly named .mp3 file
+for f in "$@"; do
+    if [[ ! -f "$f" ]]; then
+        echo "\"$f\" doesn't exist -- I won't start!" ; exit -1; fi
+    if [[ "$f" != *.flac ]]; then
+        echo "\"$f\" doesn't end in .flac -- I won't start!" ; exit -1 ; fi
+    if [[ -e "${f%.flac}.mp3" ]]; then
+        echo "\"${f%.flac}.mp3\" already exists -- I won't start!" ; exit -1; fi
+done
+
+# ffmpeg argument syntax is bananas and seems to change frequently
+#   -aq is an alias for -q:a which is short for -qscale:a
+#       this controls VBR quality level for audio. Lower is better.
+#   -vb is an OLD, now unsupported flag for setting VBR audio quality
+#   -b:a is for constant bitrate
+#   -qscale (or -qscale:v, or -q:v) sets video quality level; codec dependent
+#
+# Moreover, ffmpeg defaults to PNG video codec for static images, and will
+# convert JPEG cover art in an input FLAC file to a horrifically-large PNG.
+# Thus we specify "-vcodec copy" to pass cover art straight through, verbatim
+
+FLAGS="-acodec libmp3lame -vcodec copy -hide_banner -q:a 0"
+# if source FLACs have a bunch of bogus comments, skip copying them with:
+#    -metadata COMMENT=""
+
+for f in "$@"; do
+    echo \$ ffmpeg -i \"$f\" $FLAGS \"${f%.flac}.mp3\"
+            ffmpeg -i  "$f"  $FLAGS  "${f%.flac}.mp3"
+    echo
+done
+
+
+### fin ###
+
+# old version of this script decoded with flac and piped to lame:
+#
+#    album="$(metaflac --show-tag=album "$f" | sed 's/[^=]*=//')"
+#    artist="$(metaflac --show-tag=artist "$f" | sed 's/[^=]*=//')"
+#    date="$(metaflac --show-tag=date "$f" | sed 's/[^=]*=//')"
+#    title="$(metaflac --show-tag=title "$f" | sed 's/[^=]*=//')"
+#    year="$(metaflac --show-tag=date "$f" | sed 's/[^=]*=//')"
+#    genre="$(metaflac --show-tag=genre "$f" | sed 's/[^=]*=//')"
+#    tracknumber="$(metaflac --show-tag=tracknumber "$f" | sed 's/[^=]*=//')"
+#    flac --decode --stdout "$f" | lame --preset extreme --add-id3v2 \
+#        --tt "$title" --ta "$artist" --tl "$album" --ty "$year" \
+#        --tn "$tracknumber" --tg "$genre" - "${f%.flac}.mp3"

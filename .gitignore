@@ -1,0 +1,9 @@
+.vscode
+.DS_Store
+__pycache__
+showhex
+extras
+chars-extras
+color-extras
+unicode-15
+showchars.py
