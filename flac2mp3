@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 
 TITLE="flac2mp3"
 DESCR="convert flac files to high-quality VBR mp3"
@@ -31,25 +31,34 @@ NOTE3="      output is to the corresondingly named '.mp3' file(s)"
 #
 # I have officially spent Too Much Time on this and give up for now.
 
-
-### sanity checks ###
-# check that some files are specified
-if [[ $# == 0 || $1 == "-h" || $1 == "--help" ]]; then
-    echo -e "$TITLE - $DESCR"
-    echo -e "$USAGE\n$NOTE1\n$NOTE2\n$NOTE3"
-    exit -2
+### usage ###
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo "$TITLE - $DESCR"
+    echo "$USAGE"
+    echo "$NOTE1"
+    echo "$NOTE2"
+    echo "$NOTE3"
+    exit 0
 fi
-# for all specified files, check that
-#     1) they exist,
-#     2) they end in .flac,
-#     3) there is no corresondingly named .mp3 file
+
+# check that some files are specified
+if [ $# -eq 0 ]; then
+    echo "No files specified, see --help for usage"
+    exit 64; fi
+# for each specified file, check that:
+#   1) it exists,
+#   2) it ends in .flac,
+#   3) there is no corresondingly named .mp3 file
 for f in "$@"; do
-    if [[ ! -f "$f" ]]; then
-        echo "\"$f\" doesn't exist -- I won't start!" ; exit -1; fi
-    if [[ "$f" != *.flac ]]; then
-        echo "\"$f\" doesn't end in .flac -- I won't start!" ; exit -1 ; fi
-    if [[ -e "${f%.flac}.mp3" ]]; then
-        echo "\"${f%.flac}.mp3\" already exists -- I won't start!" ; exit -1; fi
+    if [ ! -f "$f" ] || [ ! -r "$f" ]; then
+        echo "ERROR: '$f' is not a readable file, aborting"
+        exit 66; fi
+    if ! echo "$f" | grep -q '\.flac$'; then
+        echo "ERROR: Input file '$f' doesn't end in .flac, aborting"
+        exit 65 ; fi
+    if [ -e "${f%.flac}.mp3" ]; then
+        echo "ERROR: Target file '${f%.flac}.mp3' already exists, aborting"
+        exit 73; fi
 done
 
 # ffmpeg argument syntax is bananas and seems to change frequently
@@ -68,8 +77,8 @@ FLAGS="-acodec libmp3lame -vcodec copy -hide_banner -q:a 0"
 #    -metadata COMMENT=""
 
 for f in "$@"; do
-    echo \$ ffmpeg -i \"$f\" $FLAGS \"${f%.flac}.mp3\"
-            ffmpeg -i  "$f"  $FLAGS  "${f%.flac}.mp3"
+    echo \$ ffmpeg -i \""$f"\" $FLAGS \""${f%.flac}.mp3"\"
+            ffmpeg -i   "$f"   $FLAGS   "${f%.flac}.mp3"
     echo
 done
 
