@@ -1,0 +1,206 @@
+#!/bin/sh
+
+############################################################################
+## logininfo - Print some useful info suitable for display at login       ##
+## Author: Jeremy Dolan                                                   ##
+## This work is public domain. The author hereby releases all copyright.  ##
+############################################################################
+## To print more minimal info for subshells, invoke from your rc file as: ##
+##     logininfo ; export LI_SUBSHELL=1                                   ##
+## If LI_SUBSHELL isn't set, this script will try to detect subshells     ##
+############################################################################
+
+# Color? Values are ANSI color codes
+color=1
+ruler_color="95"        # floral pink
+bannercolor="93"        # pastoral yellow
+stats_color="38;5;10"   # arboreal green
+
+# Draw a "ruler" to show terminal width?
+ruler=1
+ruler_autowidth=1       # stretch the ruler to fill the entire terminal width
+ruler_width=80          # reference width used if AUTOWIDTH=0
+
+# Draw a hostname banner with figlet?
+banner=1
+banner_for_subshells=0  # Force printing the banner even in subshells
+figlet_font="standard"  # See end of this script for some alternative fonts
+
+#######################
+## end configuration ##
+#######################
+
+
+main() {
+    if [ $ruler -eq 1 ]; then
+        if [ $ruler_autowidth -eq 1 ]; then
+            draw_ruler "$(tput cols)"
+        else
+            draw_ruler "$ruler_width"
+        fi
+    fi
+
+    if [ $banner -eq 1 ]; then
+        if [ $banner_for_subshells -eq 0 ]; then
+            # We don't want to banner on subshells, so now we need to know if
+            # we're running in a subshell:
+            if [ ! "$LI_SUBSHELL" ]; then
+                # We didn't inherit an $LI_SUBSHELL value, so try to autodetect
+                # ($SHLVL isn't required by POSIX, but it's widely implemented)
+                # problem: if we start xwin from a shell, does SHLVL increase?
+                if [ ${SHLVL-0} -gt 2 ]; then
+                    LI_SUBSHELL=1
+                else
+                    LI_SUBSHELL=0
+                fi
+            fi
+        fi
+        if [ $banner_for_subshells -eq 1 ] || [ "$LI_SUBSHELL" -eq 0 ]; then
+            draw_banner
+        fi
+    fi
+    
+    draw_status
+    color_reset
+}
+
+
+draw_ruler() {
+    if [ $color -eq 1 ]; then
+        printf "\033[%sm" "$ruler_color"
+    fi
+
+    i=1
+    while [ "$i" -le $(($1 / 10)) ]; do
+        printf "%10d" $i
+        i=$((i+1))
+    done
+    echo
+
+    i=1
+    while [ "$i" -le "$1" ]; do
+        printf "%d" "$((i % 10))"
+        i=$((i+1))
+    done
+    echo
+}
+
+
+
+draw_banner() { (
+    if [ -f ~/.nofiglet ]; then
+        fig_name=""
+    elif [ "$(which figlet)" ]; then
+        fig_name="figlet"
+    elif [ "$(which pyfiglet)" ]; then
+        fig_name="pyfiglet"
+    elif [ "$(which figlet.pl)" ]; then
+        fig_name="figlet.pl"
+    else
+        fig_name=""
+        name=$(basename "$0") # without basename: $(echo "$0"|sed -e 's@.*/@@')
+        echo "$name: No figlet found, skipping hostname banner."
+        echo "$name: Consider 'brew install figlet' or 'pip install pyfiglet'"
+        echo "$name: Or 'touch ~/.nofiglet' to silence this message."
+    fi
+
+    if [ "$fig_name" ]; then
+        if [ $color -eq 1 ]; then
+            printf "\033[%sm" "$bannercolor"
+        fi
+        "$fig_name" -f "$figlet_font" "$(hostname -s)" |
+            grep '\S' # remove figlet's extra spacing line
+    fi
+) }
+
+
+### SHELL/SYSTEM/TERMINAL STATUS
+draw_status() { (
+    line1="$(uname -sr)   tty=$(tty)   TERM=$TERM"
+    if [ -e /proc/loadavg ]; then
+        # slice in the running/total process count:
+        procs=$(awk '{ print $4, "procs" }' /proc/loadavg)
+        line2=$(uptime|sed -e "s@user\(s\?\),  load av@user\\1,  $procs,  loadav@")
+    else
+        line2=$(uptime)
+    fi
+
+    if [ $color -eq 1 ]; then
+        printf "\033[%sm" "$stats_color"
+    fi
+    printf "%s\n%s\n" "$line1" "$line2"
+) }
+
+color_reset() {
+    if [ $color -eq 1 ]; then
+        printf "\033[m"
+    fi
+}
+
+
+main
+
+
+# Some figlet fonts that work well for a hostname:
+#                    __ _
+# standard          / _| | ___  _ __ __ _
+#                  | |_| |/ _ \| '__/ _` |
+#                  |  _| | (_) | | | (_| |
+#                  |_| |_|\___/|_|  \__,_|
+#                  
+# lean                   _/_/  _/                                
+#                     _/      _/    _/_/    _/  _/_/    _/_/_/   
+#                  _/_/_/_/  _/  _/    _/  _/_/      _/    _/    
+#                   _/      _/  _/    _/  _/        _/    _/     
+#                  _/      _/    _/_/    _/          _/_/_/      
+#
+#                   .o88o. oooo                               
+# roman             888 `" `888                               
+#                  o888oo   888   .ooooo.  oooo d8b  .oooo.   
+#                   888     888  d88' `88b `888""8P `P  )88b  
+#                   888     888  888   888  888      .oP"888  
+#                   888     888  888   888  888     d8(  888  
+#                  o888o   o888o `Y8bod8P' d888b    `Y888""8o 
+#
+# colossal          .d888 888                           
+#                  d88P"  888                           
+#                  888    888                           
+#                  888888 888  .d88b.  888d888  8888b.  
+#                  888    888 d88""88b 888P"       "88b 
+#                  888    888 888  888 888     .d888888 
+#                  888    888 Y88..88P 888     888  888 
+#                  888    888  "Y88P"  888     "Y888888 
+#
+# nancyj          .8888b dP                            
+#                 88   " 88                            
+#                 88aaa  88 .d8888b. 88d888b. .d8888b. 
+#                 88     88 88'  `88 88'  `88 88'  `88 
+#                 88     88 88.  .88 88       88.  .88 
+#                 dP     dP `88888P' dP       `88888P8 
+#
+#                 .-:::::':::         ...    :::::::..    :::.     
+# cosmic          ;;;'''' ;;;      .;;;;;;;. ;;;;``;;;;   ;;`;;    
+#                 [[[,,== [[[     ,[[     \[[,[[[,/[[['  ,[[ '[[,  
+#                 `$$$"`` $$'     $$$,     $$$$$$$$$c   c$$$cc$$$c 
+#                  888   o88oo,.__"888,_ _,88P888b "88bo,888   888,
+#                  "MM,  """"YUMMM  "YMMMMMP" MMMM   "W" YMM   ""` 
+#
+# The final two fonts use retro "codepage 437" characters
+# (Run my showchars(1) with --437 to view the charset via Unicode 'emulation')
+# Both fonts can be found on the web; 3d.flf file says it was created by 'xero'
+#
+# 3d                   ██████  ████                              
+#                     ███░░███░░███                              
+#                    ░███ ░░░  ░███   ██████  ████████   ██████  
+#                   ███████    ░███  ███░░███░░███░░███ ░░░░░███ 
+#                  ░░░███░     ░███ ░███ ░███ ░███ ░░░   ███████ 
+#                    ░███      ░███ ░███ ░███ ░███      ███░░███ 
+#                    █████     █████░░██████  █████    ░░████████
+#                   ░░░░░     ░░░░░  ░░░░░░  ░░░░░      ░░░░░░░░ 
+#                  
+# ANSI Shadow      ███████╗██╗      ██████╗ ██████╗  █████╗ 
+#                  ██╔════╝██║     ██╔═══██╗██╔══██╗██╔══██╗
+#                  █████╗  ██║     ██║   ██║██████╔╝███████║
+#                  ██╔══╝  ██║     ██║   ██║██╔══██╗██╔══██║
+#                  ██║     ███████╗╚██████╔╝██║  ██║██║  ██║
+#                  ╚═╝     ╚══════╝ ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝
