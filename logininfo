@@ -1,7 +1,7 @@
 #!/bin/sh
 
 ############################################################################
-## logininfo - Print some useful info suitable for display at login       ##
+## logininfo - Print some terminal, host, and shell info on login         ##
 ## Author: Jeremy Dolan                                                   ##
 ## This work is public domain. The author hereby releases all copyright.  ##
 ############################################################################
@@ -11,18 +11,20 @@
 ############################################################################
 
 # Color? Values are ANSI color codes
-color=1
+color_enabled=1
+color_for_subshells=0   # keep it minimal 
 ruler_color="95"        # floral pink
 bannercolor="93"        # pastoral yellow
-stats_color="38;5;10"   # arboreal green
+stats_color="92"        # arboreal green
 
 # Draw a "ruler" to show terminal width?
-ruler=1
+ruler_enabled=1
+ruler_for_subshells=0
 ruler_autowidth=1       # stretch the ruler to fill the entire terminal width
-ruler_width=80          # reference width used if AUTOWIDTH=0
+ruler_width=80          # reference width used if ruler_autowidth=0
 
 # Draw a hostname banner with figlet?
-banner=1
+banner_enabled=1
 banner_for_subshells=0  # Force printing the banner even in subshells
 figlet_font="standard"  # See end of this script for some alternative fonts
 
@@ -30,9 +32,12 @@ figlet_font="standard"  # See end of this script for some alternative fonts
 ## end configuration ##
 #######################
 
+# todo:
+# change subshell check to have calling shell pass whether it's a login shell?
+# perf test ruler's printf loop concatenating to a string first
 
 main() {
-    if [ $ruler -eq 1 ]; then
+    if [ $ruler_enabled -eq 1 ]; then
         if [ $ruler_autowidth -eq 1 ]; then
             draw_ruler "$(tput cols)"
         else
@@ -40,23 +45,21 @@ main() {
         fi
     fi
 
-    if [ $banner -eq 1 ]; then
-        if [ $banner_for_subshells -eq 0 ]; then
-            # We don't want to banner on subshells, so now we need to know if
-            # we're running in a subshell:
+    if [ $banner_enabled -eq 1 ]; then
+        if [ $banner_for_subshells -eq 1 ]; then
+            draw_banner
+        else
+            # User doesn't want to banner on subshells
+            # So we need to know if we're running in a subshell:
             if [ ! "$LI_SUBSHELL" ]; then
                 # We didn't inherit an $LI_SUBSHELL value, so try to autodetect
                 # ($SHLVL isn't required by POSIX, but it's widely implemented)
                 # problem: if we start xwin from a shell, does SHLVL increase?
-                if [ ${SHLVL-0} -gt 2 ]; then
-                    LI_SUBSHELL=1
-                else
-                    LI_SUBSHELL=0
+                # need to calibrate SHLVL, or have the calling shell pass state
+                if [ ${SHLVL-0} -eq 2 ]; then
+                    draw_banner
                 fi
             fi
-        fi
-        if [ $banner_for_subshells -eq 1 ] || [ "$LI_SUBSHELL" -eq 0 ]; then
-            draw_banner
         fi
     fi
     
@@ -66,7 +69,7 @@ main() {
 
 
 draw_ruler() {
-    if [ $color -eq 1 ]; then
+    if [ $color_enabled -eq 1 ]; then
         printf "\033[%sm" "$ruler_color"
     fi
 
@@ -86,8 +89,11 @@ draw_ruler() {
 }
 
 
-
 draw_banner() { (
+    if [ $color_enabled -eq 1 ]; then
+        printf "\033[%sm" "$bannercolor"
+    fi
+
     if [ -f ~/.nofiglet ]; then
         fig_name=""
     elif [ "$(which figlet)" ]; then
@@ -105,36 +111,39 @@ draw_banner() { (
     fi
 
     if [ "$fig_name" ]; then
-        if [ $color -eq 1 ]; then
-            printf "\033[%sm" "$bannercolor"
-        fi
         "$fig_name" -f "$figlet_font" "$(hostname -s)" |
             grep '\S' # remove figlet's extra spacing line
     fi
 ) }
 
 
-### SHELL/SYSTEM/TERMINAL STATUS
 draw_status() { (
     line1="$(uname -sr)   tty=$(tty)   TERM=$TERM"
     if [ -e /proc/loadavg ]; then
         # slice in the running/total process count:
         procs=$(awk '{ print $4, "procs" }' /proc/loadavg)
-        line2=$(uptime|sed -e "s@user\(s\?\),  load av@user\\1,  $procs,  loadav@")
+        line2=$(uptime | \
+            sed -e "s@user\(s\?\),  load average@user\\1,  $procs,  loadavg@")
     else
         line2=$(uptime)
     fi
 
-    if [ $color -eq 1 ]; then
+    if [ $color_enabled -eq 1 ]; then
         printf "\033[%sm" "$stats_color"
     fi
     printf "%s\n%s\n" "$line1" "$line2"
 ) }
 
+
 color_reset() {
-    if [ $color -eq 1 ]; then
+    if [ $color_enabled -eq 1 ]; then
         printf "\033[m"
     fi
+}
+
+
+called_by_login_shell() {
+    echo "TODO"
 }
 
 
