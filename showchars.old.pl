@@ -97,5 +97,5 @@ if (defined $ARGV[0] and $ARGV[0] =~ "^--437\$") {
     }
 } else {
     print "(Use --437 to show old-school codepage 437 chars with " .
-         "new-school Unicode addrs)\n";
+         "new-school Unicode code points)\n";
 }
