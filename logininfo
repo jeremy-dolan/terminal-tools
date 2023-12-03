@@ -1,75 +1,79 @@
 #!/bin/sh
 
-############################################################################
-## logininfo - Print some terminal, host, and shell info on login         ##
-## Author: Jeremy Dolan                                                   ##
-## This work is public domain. The author hereby releases all copyright.  ##
-############################################################################
-## To print more minimal info for subshells, invoke from your rc file as: ##
-##     logininfo ; export LI_SUBSHELL=1                                   ##
-## If LI_SUBSHELL isn't set, this script will try to detect subshells     ##
-############################################################################
+################################################################################
+## logininfo - Print some terminal, host, and shell info at login             ##
+## Author: Jeremy Dolan                                                       ##
+## This work is public domain. The author hereby releases all copyright.      ##
+################################################################################
+## To allow more verbose output for login shells and less verbose output for  ##
+## (interactive) subshells, run from shell rc file with "--login" appended    ##
+## when invoked by the initial shell. For zsh, ksh, and bash:                 ##
+##     logininfo $([[ $0 == -* ]] && echo "--login")                          ##
+## will usually work. Another more robust option but for zsh and ksh only:    ##
+##     logininfo $([[ -o login ]] && echo "--login")                          ##
+################################################################################
 
-# Color? Values are ANSI color codes
-color_enabled=1
-color_for_subshells=0   # keep it minimal 
-ruler_color="95"        # floral pink
+color_enabled=1         # color output?
+color_always=0          # only for login shells, or always?
+ruler_color="35"        # floral pink (ANSI color code; null string will reset)
 bannercolor="93"        # pastoral yellow
 stats_color="92"        # arboreal green
 
-# Draw a "ruler" to show terminal width?
-ruler_enabled=1
-ruler_for_subshells=0
+ruler_enabled=1         # draw a "ruler" to show terminal width?
+ruler_always=0          # only for login shells, or always?
 ruler_autowidth=1       # stretch the ruler to fill the entire terminal width
 ruler_width=80          # reference width used if ruler_autowidth=0
 
-# Draw a hostname banner with figlet?
-banner_enabled=1
-banner_for_subshells=0  # Force printing the banner even in subshells
-figlet_font="standard"  # See end of this script for some alternative fonts
+banner_enabled=1        # draw a hostname banner with figlet?
+banner_always=0         # only for login shells, or always?
+figlet_font="standard"  # see bottom of this script for some alternative fonts
 
 #######################
 ## end configuration ##
 #######################
 
+terminal_width="$(tput cols)"
+argument="$1"
+
 # todo:
-# change subshell check to have calling shell pass whether it's a login shell?
 # perf test ruler's printf loop concatenating to a string first
+# status $line1/2 should check line length < terminal width
 
 main() {
-    if [ $ruler_enabled -eq 1 ]; then
+    if is_enabled ruler; then
         if [ $ruler_autowidth -eq 1 ]; then
-            draw_ruler "$(tput cols)"
+            draw_ruler "$terminal_width"
         else
             draw_ruler "$ruler_width"
         fi
     fi
 
-    if [ $banner_enabled -eq 1 ]; then
-        if [ $banner_for_subshells -eq 1 ]; then
-            draw_banner
-        else
-            # User doesn't want to banner on subshells
-            # So we need to know if we're running in a subshell:
-            if [ ! "$LI_SUBSHELL" ]; then
-                # We didn't inherit an $LI_SUBSHELL value, so try to autodetect
-                # ($SHLVL isn't required by POSIX, but it's widely implemented)
-                # problem: if we start xwin from a shell, does SHLVL increase?
-                # need to calibrate SHLVL, or have the calling shell pass state
-                if [ ${SHLVL-0} -eq 2 ]; then
-                    draw_banner
-                fi
-            fi
+    if is_enabled banner; then
+        draw_banner
+    fi
+
+    draw_status
+    reset_color
+}
+
+
+# check if the feature passed as $1 is enabled
+is_enabled() {
+    # eval is the best way to substitute into a var name with POSIX sh?
+    eval "feature_enabled=\$${1}_enabled"
+    eval "feature_always=\$${1}_always"
+
+    if [ "$feature_enabled" -eq 1 ]; then
+        if [ "$feature_always" -eq 1 ] || is_login_shell; then
+            return 0
         fi
     fi
-    
-    draw_status
-    color_reset
+    return 1
 }
 
 
 draw_ruler() {
-    if [ $color_enabled -eq 1 ]; then
+    if is_enabled color; then
         printf "\033[%sm" "$ruler_color"
     fi
 
@@ -90,7 +94,7 @@ draw_ruler() {
 
 
 draw_banner() { (
-    if [ $color_enabled -eq 1 ]; then
+    if is_enabled color; then
         printf "\033[%sm" "$bannercolor"
     fi
 
@@ -104,7 +108,7 @@ draw_banner() { (
         fig_name="figlet.pl"
     else
         fig_name=""
-        name=$(basename "$0") # without basename: $(echo "$0"|sed -e 's@.*/@@')
+        name=$(basename "$0")
         echo "$name: No figlet found, skipping hostname banner."
         echo "$name: Consider 'brew install figlet' or 'pip install pyfiglet'"
         echo "$name: Or 'touch ~/.nofiglet' to silence this message."
@@ -128,22 +132,26 @@ draw_status() { (
         line2=$(uptime)
     fi
 
-    if [ $color_enabled -eq 1 ]; then
+    if is_enabled color; then
         printf "\033[%sm" "$stats_color"
     fi
     printf "%s\n%s\n" "$line1" "$line2"
 ) }
 
 
-color_reset() {
-    if [ $color_enabled -eq 1 ]; then
+reset_color() {
+    if is_enabled color; then
         printf "\033[m"
     fi
 }
 
 
-called_by_login_shell() {
-    echo "TODO"
+is_login_shell() {
+    if [ "$argument" = "--login" ]; then
+        return 0
+    else
+        return 1
+    fi
 }
 
 
@@ -194,9 +202,9 @@ main
 #                  888   o88oo,.__"888,_ _,88P888b "88bo,888   888,
 #                  "MM,  """"YUMMM  "YMMMMMP" MMMM   "W" YMM   ""` 
 #
-# The final two fonts use retro "codepage 437" characters
-# (Run my showchars(1) with --437 to view the charset via Unicode 'emulation')
-# Both fonts can be found on the web; 3d.flf file says it was created by 'xero'
+# These two fonts use Unicode versions of the codepage 437 characters for a
+# retro "ANSI art" vibe. They're not in the standard figlet font set but can
+# readily be found on the web in figlet and TheDraw font archives.
 #
 # 3d                   ██████  ████                              
 #                     ███░░███░░███                              
