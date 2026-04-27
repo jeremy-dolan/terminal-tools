@@ -1,8 +1,13 @@
-Some doo-dads and whats-its from many years spent at the command line
+Some doo-dads and whats-its for the command line
 
 Slowly publishing things as I find them and clean them up
 
 ---
+
+* [ssh-diff](ssh-diff) - diff -u two files, allowing scp-like SSH paths
+
+* [flac2mp3](flac2mp3) - convert flac files to high-quality VBR mp3 \[wrapper
+  for ffmpeg\]
 
 * [logininfo](logininfo) Print some terminal, host, and shell info on login \[POSIX sh\]
 
@@ -12,6 +17,3 @@ Slowly publishing things as I find them and clean them up
   other text decorations) \[Python\]
 
 ![showcolors output](example-output/showcolors.png)
-
-* [flac2mp3](flac2mp3) - convert flac files to high-quality VBR mp3 \[wrapper
-  for ffmpeg\]

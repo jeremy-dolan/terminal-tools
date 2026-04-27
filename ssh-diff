@@ -1,0 +1,48 @@
+#!/bin/bash
+#
+# ssh-diff - diff -u two files, allowing scp-like SSH paths
+# Author: Jeremy Dolan (2026/04/27)
+
+set -u
+
+prog=${0##*/}
+
+usage() {
+    cat >&2 <<EOF
+Usage: $prog FILE1 FILE2
+  diff -u two files, allowing scp-like SSH paths of the form [user@]host:path
+  Filenames containing ':' can be explicitly marked as local by including a '/'
+    in the path before the ':', for example: "./file:name"
+EOF
+}
+
+if [ $# -ne 2 ]; then
+    usage
+    exit 2
+fi
+
+# True if $1 looks like a remote spec: contains ':' before any '/'.
+# IPv6 probably breaks this
+is_remote() {
+    local before_slash=${1%%/*}
+    [[ $before_slash == *:* ]]
+}
+
+# Write the contents of $1 to file $2, via ssh if path is remote.
+fetch() {
+    if is_remote "$1"; then
+        local host=${1%%:*}
+        local path=${1#*:}
+        ssh "$host" cat -- "$(printf '%q' "$path")" > "$2"
+    else
+        cat -- "$1" > "$2"
+    fi
+}
+
+tmp=$(mktemp -d) || exit 3
+trap 'rm -rf "$tmp"' EXIT
+
+fetch "$1" "$tmp/a" || { echo "$prog: failed to read $1" >&2; exit 3; }
+fetch "$2" "$tmp/b" || { echo "$prog: failed to read $2" >&2; exit 3; }
+
+diff -u --label "$1" --label "$2" "$tmp/a" "$tmp/b"
