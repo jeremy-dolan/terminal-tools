@@ -1,19 +1,29 @@
-Some doo-dads and whats-its for the command line
+Some command-line utilities I've written and continue to find useful.
 
-Slowly publishing things as I find them and clean them up
+Public domain (under CC0, https://creativecommons.org/publicdomain/zero/1.0/).
+Use them however you like.
 
----
-
-* [ssh-diff](ssh-diff) - diff -u two files, allowing scp-like SSH paths
-
-* [flac2mp3](flac2mp3) - convert flac files to high-quality VBR mp3 \[wrapper
-  for ffmpeg\]
-
-* [logininfo](logininfo) Print some terminal, host, and shell info on login \[POSIX sh\]
-
-![logininfo output](example-output/logininfo.png)
-
-* [showcolors](showcolors) - Test ANSI control sequences for color (and
-  other text decorations) \[Python\]
+### [showcolors](showcolors)
+Test "ANSI color" and other SGR control sequences. (Python)
 
 ![showcolors output](example-output/showcolors.png)
+
+
+### [ssh-diff](ssh-diff)
+Diff two files, allowing scp-like paths of the form `[user@]ssh-host:path`.
+(bash; wraps `diff` and `ssh`)
+
+```
+% ssh-diff sandbox:dev/file host:deploy/file
+...
+```
+
+### [flac2mp3](flac2mp3)
+Convert FLAC files to high-quality VBR MP3. (POSIX sh; requires `ffmpeg`)
+
+
+### [logininfo](logininfo)
+Pretty print some system and terminal info on login. (bash; uses `figlet` if
+available)
+
+![logininfo output](example-output/logininfo.png)
