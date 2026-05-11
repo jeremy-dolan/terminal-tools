@@ -1,23 +1,23 @@
-#!/bin/sh
+#!/bin/bash
 
-################################################################################
-## logininfo - Print some terminal, host, and shell info at login             ##
-## Author: Jeremy Dolan                                                       ##
-## This work is public domain. The author hereby releases all copyright.      ##
-################################################################################
-## To allow more verbose output for login shells and less verbose output for  ##
-## (interactive) subshells, run from shell rc file with "--login" appended    ##
-## when invoked by the initial shell. For zsh, ksh, and bash:                 ##
-##     logininfo $([[ $0 == -* ]] && echo "--login")                          ##
-## will usually work. Another more robust option but for zsh and ksh only:    ##
-##     logininfo $([[ -o login ]] && echo "--login")                          ##
-################################################################################
+###############################################################################
+## logininfo - Print some terminal, host, and shell info at login            ##
+## Author: Jeremy Dolan                                                      ##
+## This work is public domain. The author hereby releases all copyright.     ##
+###############################################################################
+## To allow more verbose output for login shells and less verbose output for ##
+## (interactive) subshells, run from your shell's rc file with "--login"     ##
+## appended when invoked by the initial shell. E.g., for zsh, ksh, and bash: ##
+##     logininfo $([[ $0 == -* ]] && echo "--login")                         ##
+## will usually work. In some zsh and ksh environments this may work better: ##
+##     logininfo $([[ -o login ]] && echo "--login")                         ##
+###############################################################################
 
 color_enabled=1         # color output?
 color_always=0          # only for login shells, or always?
-ruler_color="35"        # floral pink (ANSI color code; null string will reset)
+ruler_color="95"        # floral pink
 bannercolor="93"        # pastoral yellow
-stats_color="92"        # arboreal green
+stats_color="36"        # mossy teal
 
 ruler_enabled=1         # draw a "ruler" to show terminal width?
 ruler_always=0          # only for login shells, or always?
@@ -122,6 +122,21 @@ draw_banner() { (
 
 
 draw_status() { (
+    if is_enabled color; then
+        printf "\033[%sm" "$stats_color"
+    fi
+
+    # MacOS version
+    if [[ "$(uname)" == "Darwin" ]]; then
+        product="$(sw_vers --productName)"
+        version="$(sw_vers --productVersion)"
+        vers_extras="$(sw_vers --productVersionExtra)"
+        #build="$(sw_vers --buildVersion)"
+        #echo -n "$product" "$version""$vers_extras" "(""$build"")"
+        /bin/echo -n "$product" "$version" "/ "
+    fi
+
+    # cross-platform
     line1="$(uname -sr)   tty=$(tty)   TERM=$TERM"
     if [ -e /proc/loadavg ]; then
         # slice in the running/total process count:
@@ -130,10 +145,6 @@ draw_status() { (
             sed -e "s@user\(s\?\),  load average@user\\1,  $procs,  loadavg@")
     else
         line2=$(uptime)
-    fi
-
-    if is_enabled color; then
-        printf "\033[%sm" "$stats_color"
     fi
     printf "%s\n%s\n" "$line1" "$line2"
 ) }
