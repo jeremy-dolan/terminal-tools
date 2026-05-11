@@ -1,40 +1,367 @@
 #!/usr/bin/env python3
 
-"""Show/test ANSI control sequences for color (and other text decorations)"""
-
-###
-# Author: Jeremy Dolan
-# Rewritten in Python with better color cube presentation - March 2023
-#
+"""Test "ANSI color" and other SGR control sequences"""
+# Author: Jeremy Dolan <https://jeremydolan.net>
 # This work is public domain. The author hereby releases all copyright.
-# This software is provided free and “as is”, without warranties of any kind,
-# express or implied, including but not limited to the warranties of fitness
-# for a particular purpose or merchantability. In no event shall the author be
-# liable for any damages arising in any way out of the use of this software.
-###
+# 2023-03: Translated from sh to Python; improved 256-color cube presentation
+# 2026-05: Add truecolor color cube; refactor/overengineer everything else
+
+from dataclasses import dataclass
+from math import sqrt
+
+type Vec2 = tuple[float, float]
+type RGBFloat = tuple[float, float, float]  # each channel in [0.0, 1.0]
+type RGB8 = tuple[int, int, int]            # each channel in [0, 255]
+
+"""
+SGR ("Select Graphic Rendition") control sequences are used for setting
+attributes when rendering text in a terminal. They are of the form:
+    ESC + '[' + [optional parameters] + 'm'
+where:
+   'ESC' introduces an ANSI escape sequence (0x1b hex, 033 octal)
+    '['  indicates the sequence is a "Control Sequence Introducer" (CSI)
+    'm'  indicates the CSI command is "Select Graphic Rendition" (SGR)
+
+The parameters are optional (default '0'), semicolon-separated codes that
+indicate which attributes to set.
+"""
+CSI = "\033["
+def sgr(*attributes: int|str) -> str:
+    """Return an SGR sequence with the given parameters"""
+    return f"{CSI}{';'.join(map(str, attributes))}m"
+def reset():
+    return sgr()  # A paramter-less SGR "ESC[m" uses the default 0 ("reset")
+
+
+def main():
+    print_8color()
+    print_16color()
+    print_256color()
+    print_24bit_cube()
+    print_other_sgrs()
+
+
+def underline(s: str):
+    return f'{sgr(4)}{s}{reset()}'
+
+
+def print_8color():
+    print(underline('original ANSI colors'), end='')
+    print(': \\033[{30..37}m (foreground), \\033[{40..47}m (background)')
+
+    print(' |', end='')
+    for c in range(8):
+        print(f'{sgr(40+c)} 3{c} ', end='')
+    print(f'{reset()}|\n')
+
+
+def print_16color():
+    print(underline('aixterm extension'), end='')
+    print(': \\033[{90..97}m (foreground), \\033[{100..107}m (background)')
+    # These codes were an aixterm extension circa 1994. Prior to that, many terminals displayed
+    # brighter colors when the 8 colors above were combined with the bold text attribute (ESC[1m).
+    print(' |', end='')
+    for c in range(8):
+        print(f'{sgr(100+c)} 9{c} ', end='')
+    print(f'{reset()}|\n')
+
+
+def print_256color():
+    def print_swatch(c):
+        if 15 < c < 232 and (c-16) % 36 in {29, 35}:  # if in cube range and columns 29 and 35...
+            print(f'{sgr(48, 5, c)} ', end='')        # one skinnier (to fit terminal width 80)
+        else:
+            print(f'{sgr(48, 5, c)}  ', end='')
+
+    print(underline('256-color extension'), end='')
+    print(': \\033[38;5;{0..255}m (fore), \\033[48;5;{0..255}m (back)')
+    print(f'The 16 colors above, a 6x6x6 cubic colorspace, and a 24-step grayscale gradient')
+
+    # Original 16 colors as 2 rows of 8
+    for set in range(2):
+        print(str(8*set).rjust(3), end=' ')
+        for color in range(8):
+            print_swatch(8*set + color)
+        print(reset())
+    print()
+
+    # The middle 216 colors are arranged as a 6x6x6 cubic RGB colorspace
+    # Display a row of six 6x6 z-slices:
+    # 2 rows of slices, 6 lines per slice, 3 slices per line, 6 colors per slice 
+    for line in range(6):
+        print(str(16 + 36*line).rjust(3), end=' ')
+        for slice in range(6):
+            for color in range(6):
+                print_swatch(16 + 36*line + 6*slice + color)
+            print(reset(), end=' ')  # space between slices
+        print()
+    print()
+
+    # The final 24 colors are a dark-to-light grayscale gradient; display as 2 rows of 12
+    print('232', end=' ')
+    for i in range(24):
+        print_swatch(232+i)
+    print(reset())
+    print()
+
+
+def print_24bit_cube():
+    """
+    Draw an isometric RGB color cube using inverse projection.
+
+    For each logical pixel (Unicode half-blocks ▀▄):
+        map coordinate back onto a cube face (if any)
+        recover that pixel coordinates on whatever face (if any) it lies on
+        convert those local coordinates into RGB
+        print the character cell as a colored half-block plus a colored background
+    """
+    print(underline('24-bit-color extension'))
+
+    # Pixel-level raster: 2 half-blocks (▀▄) stack into one terminal row
+    EDGE_LENGTH = 20  # single edge in half-block pixels (≈ rendered terminal-row height for cube)
+    EDGE_RUN = EDGE_LENGTH * sqrt(3)/2  # horizontal run of a 30° isometric edge
+
+    # Size in logical pixels
+    RASTER_WIDTH = int(2 * EDGE_RUN) + 2  # +2 horizontal padding
+    RASTER_HEIGHT = 2 * EDGE_LENGTH
+
+    # Snap x-center to an integer column so the central vertical seam stays crisp
+    RASTER_CENTER = (RASTER_WIDTH // 2, (RASTER_HEIGHT-1) / 2)
+
+    EPS = 1e-9
+
+    @dataclass(frozen=True)
+    class Face:
+        """
+        The "cube" is drawn as three identically sized visible faces in isometric projection. Each
+        face uses local coordinates a and b, which range from 0 to 1 across the face. Those
+        coordinates map (affinely) to both screen position and color.
+
+        For a, b ∈ [0, 1]:
+
+            screen_point(a, b) = p + a*u + b*v
+            color(a, b) = c + a*cu + b*cv
+
+        where:
+            p = face origin in screen space
+            u, v = the two screen-space basis vectors that span the face
+            c  = RGB at the face origin
+            cu, cv = RGB changes corresponding to the local a and b directions, respectively
+
+        To render, we invert the screen map to recover (a, b) from a pixel,
+        then evaluate the color map forward.
+        """
+        p: Vec2       # screen-space origin
+        u: Vec2       # screen-space basis vectors
+        v: Vec2
+        c: RGBFloat   # RGB at p
+        cu: RGBFloat  # RGB deltas along u and v
+        cv: RGBFloat
+
+        def sample(self, x: float, y: float) -> RGBFloat | None:
+            """Return RGB at screen (x,y) if it lies on this face, else None."""
+            # Solve [u v]·(a,b)ᵀ = (x,y) - p via the closed-form 2x2 inverse.
+            qx, qy = x - self.p[0], y - self.p[1]
+            ux, uy = self.u
+            vx, vy = self.v
+            det = ux * vy - uy * vx
+            a = (qx * vy - qy * vx) / det
+            b = (ux * qy - uy * qx) / det
+
+            if not (-EPS <= a <= 1 + EPS and -EPS <= b <= 1 + EPS):
+                return None
+            # Snap near-edge values back into [0,1].
+            a = min(1.0, max(0.0, a))
+            b = min(1.0, max(0.0, b))
+
+            return (
+                self.c[0] + a * self.cu[0] + b * self.cv[0],
+                self.c[1] + a * self.cu[1] + b * self.cv[1],
+                self.c[2] + a * self.cu[2] + b * self.cv[2],
+            )
+
+    # Three visible faces. Projection: +blue is up, +red is down-right,
+    # +green is down-left. Each face maps (a,b) ∈ [0,1]² onto a parallelogram.
+    FACES = [
+        # Top face (blue=1 is fixed): a → red (down-right), b → green (down-left)
+        Face(
+            p=(0, -EDGE_LENGTH),
+            u=(EDGE_RUN, EDGE_LENGTH / 2),
+            v=(-EDGE_RUN, EDGE_LENGTH / 2),
+            c=(0, 0, 1),
+            cu=(1, 0, 0),
+            cv=(0, 1, 0),
+        ),
+        # Right face (red=1 is fixed): a → 1 - green (up-right), b → 1 - blue (down)
+        Face(
+            p=(0, 0),
+            u=(EDGE_RUN, -EDGE_LENGTH / 2),
+            v=(0, EDGE_LENGTH),
+            c=(1, 1, 1),
+            cu=(0, -1, 0),
+            cv=(0, 0, -1),
+        ),
+        # Left face (green=1 is fixed): a → 1 - red (up-left), b → 1 - blue (down)
+        Face(
+            p=(0, 0),
+            u=(-EDGE_RUN, -EDGE_LENGTH / 2),
+            v=(0, EDGE_LENGTH),
+            c=(1, 1, 1),
+            cu=(-1, 0, 0),
+            cv=(0, 0, -1),
+        ),
+    ]
+
+    def color_at(x: int, y: int) -> RGBFloat | None:
+        """Sample the cube at a logical pixel coordinate (raster space half-blocks)."""
+        px = x - RASTER_CENTER[0]
+        py = y - RASTER_CENTER[1]
+        for face in FACES:
+            color = face.sample(px, py)
+            if color is not None:
+                return color
+        return None
+
+    def quantize_channel(channel: float) -> int:
+        clamped = min(1.0, max(0.0, channel))
+        return int(255 * clamped + 0.5)
+
+    def quantize_rgb(channels: RGBFloat) -> RGB8:
+        """Quantize a normalized RGB triple to 8-bit"""
+        r,g,b = channels
+        return quantize_channel(r), quantize_channel(g), quantize_channel(b)
+
+    def color_cell(top: RGBFloat | None, bot: RGBFloat | None) -> str:
+        """
+        Render two stacked half-pixels as one terminal character cell using Unicode block glyphs.
+
+        Cases:
+        neither pixel exists -> space
+        only bottom exists   -> '▄' glyph
+        only top exists      -> '▀' glyph
+        both exist           -> background color for upper half, foreground '▄' for lower half
+        """
+        match top, bot:
+            case None, None:
+                return " "
+            case None, _:
+                return f"{sgr(38, 2, *quantize_rgb(bot))}▄{reset()}"
+            case _, None:
+                return f"{sgr(38, 2, *quantize_rgb(top))}▀{reset()}"
+            case _:
+                return f"{sgr(38, 2, *quantize_rgb(bot), 48, 2, *quantize_rgb(top))}▄{reset()}"
+
+    truecolor_notes = {
+        1: "Accessed with:",
+        2: r" \033[38;2;<r>;<g>;<b>m (foreground)",
+        3: r" \033[48;2;<r>;<g>;<b>m (background)",
+        5: "A 256x256x256 cubic colorspace.",
+        7: "This projection shows only the bright",
+        8: "outer shell (where at least one RGB",
+        9: "channel is 255), which is about 1%",
+        10: r"of the space. (Muted interior colors",
+        11: "and grays are not visible.)",
+        13: "Supported on all modern terminal",
+        14: "emulators, including, finally,",
+        15: "Terminal.app as of macOS 26.",
+    }
+
+    # Main raster loop
+    LEFT_PADDING = 3
+    RIGHT_PADDING = 4
+    TOP_PADDING = 1  # one half-block
+    for terminal_row in range((RASTER_HEIGHT+TOP_PADDING+1) // 2):
+        top_row = 2*terminal_row - TOP_PADDING
+        bot_row = top_row + 1
+        print(' ' * LEFT_PADDING, end='')
+        print(''.join(color_cell(color_at(col, top_row), color_at(col, bot_row))
+                      for col in range(RASTER_WIDTH)), end='')
+        if note := truecolor_notes.get(terminal_row, ""):
+            print(f'{' ' * RIGHT_PADDING}{note}')
+        else:
+            print()
+
+
+def print_other_sgrs():
+    print(underline('Other frequently-implemented SGR control sequences'), end='')
+    print(': \\033[{0..9}m')
+    # print('Zero is the default code, thus \\033[m also resets; six is rarely implemented')
+    miscellaneous_sgrs_line1 = [
+        f'0: reset',
+        f'1: {sgr(1)}bold{reset()}\t',
+        f'2: {sgr(2)}dim{reset()}\t',
+        f'3: {sgr(3)}italic{reset()}',
+        f'4: {sgr(4)}underline{reset()}',
+    ]
+    miscellaneous_sgrs_line2 = [
+        f'5: {sgr(5)}blink{reset()}',
+        f'6: {sgr(6)}fast-blink{reset()}',
+        f'7: {sgr(7)}inverse{reset()}',
+        f'8: {sgr(8)}hidden{reset()}',
+        f'9: {sgr(9)}strike{reset()}',
+    ]
+    print(' ' + '\t'.join(miscellaneous_sgrs_line1))
+    print(' ' + '\t'.join(miscellaneous_sgrs_line2))
+
+if __name__ == "__main__":
+    main()
+
 
 r"""
-ANSI SGR ("Select Graphic Rendition") parameters are of the form:
-    ESC + '[' + semicolon-separated-list-of-numerical-codes + 'm'
-where 'ESC' is the escape control code (0x1b).
+Appendices
 
- * In most interactive terminals, 'ESC' can be inserted by typing 'control-V'
-   to enter verbatim insertion mode, followed by the 'Esc' key or 'control-['
- * In Python, we specify 'ESC' as the Unicode code point '\u001b'
- * In POSIX command-line contexts, the most portable solution is to use
-   printf(1), because using escaped character codes with echo(1) is not
-   standardized by POSIX and actual implementations are incompatible.
-     printf: POSIX/IEEE Std 1003.1-2017, FreeBSD, Linux, and macOS all
-             consistently interpret '\ooo' as the byte whose value is the 1-,
-             2-, or 3-digit octal number 'ooo'. ('ESC' is octal 033.)
-     echo: Backslash interpretation is "implementation-defined" according to
-           POSIX.1, although the XSI extension mandates \0NNN replacement for
-           octal byte codes. In practice, many echo implementations replace
-           the sequence \0NNN with the character at octal value NNN; however,
-           some require '-e' to interpret backslash escapes (e.g. GNU utils),
-           while others have no support at all (e.g. macOS).)
+## Accessing the ESC control code
 
-## LINKS ##
+* In most interactive terminals, 'ESC' can be inserted by typing 'control-V'
+  to enter verbatim insertion mode, followed by the 'Esc' key or 'control-['
+* In Python, 'ESC' is specified as octal '\033' or Unicode code point '\u001b'
+* From a shell, the most portable solution is to use printf(1), because using
+  escaped character codes with echo(1) is not standardized by POSIX and actual
+  implementations are incompatible:
+    * For `printf`, POSIX/IEEE Std 1003.1-2017, FreeBSD, Linux, and macOS all
+      consistently interpret '\ooo' as the byte whose value is the 1-, 2-, or
+      3-digit octal number 'ooo'. ('ESC' is octal 033.)
+    * For `echo`, interpretation of backslashes is "implementation-defined"
+      according to POSIX.1, although the XSI extension mandates \0NNN
+      replacement for octal byte codes. In practice, many echo implementations
+      replace the sequence \0NNN with the character at octal value NNN;
+      however, some require '-e' to interpret backslash escapes (e.g. GNU
+      utils), while others have no support at all (e.g. macOS). Details follow.
+
+
+## Survey of `echo` implementations
+
+    POSIX.1 specification   backslash interpretation is "implementation-defined"
+                            https://pubs.opengroup.org/onlinepubs/009604499/utilities/echo.html
+    POSIX.1 XSI extension   \0NNN  replace with the 8-bit value given by octal NNN (0 to 3 digits)
+    macOS /bin/echo         no support
+    GNU coreutils /bin/echo (-e flag required to interpret escapes)
+                            \0NNN  byte with octal value NNN (0 to 3 digits)
+                            \NNN   byte with octal value NNN (1 to 3 digits; unique to coreutils)
+                            \xHH   byte with hex value HH (1 to 2 digits)
+    GNU bash builtin echo   (-e flag required to interpret escapes)
+                            \0NNN  byte with octal value NNN (0 to 3 digits)
+                            \xHH   byte with hex value HH (1 to 2 digits)
+                            \uHHHH Unicode character with 16-bit hex value HHHH (1 to 4 digits)
+                            \UHHHHHHHH Unicode character with given 32-bit hex value (1 to 8 digits)
+    AT&T ksh builtin echo   (-e flag required to interpret escapes)
+                            \0NNN  character code in octal (0 to 3 digits; undocumented)
+    zsh builtin echo        (-e flag is NOT required, but can be given and will
+                                   override various bash compatibility modes)
+                            \0NNN  character code in octal
+                            \xHH   character code in hex (1 to 2 digits)
+                            \0xHH  character code in hex (1 to 2 digits; unique to zsh)
+                            \uHHHH unicode character code in hexadecimal (1 to 4 digits)
+                            \UHHHHHHHH Unicode character with given 32-bit hex value (1 to 8 digits)
+    dash builtin echo       \0NNN  character code in octal (POSIX compliant) 
+
+*: For implementations that specify NNN may be "zero" to three digits, zero
+   digits will print the NUL character; i.e., \0 == \00 == \000 == \0000
+*: Three octal digits allow for 9 bits of information (3 bits per octal digit).
+   If NNN is a 9-bit value, the ninth bit is ignored; e.g., \544 == \144
+
+
+## Links
 General overview:
   https://en.wikipedia.org/wiki/ANSI_escape_code
 Manual for xterm's control sequences; comprehensive documentation:
@@ -50,93 +377,3 @@ Printf(1) specifications:
   https://man.freebsd.org/cgi/man.cgi?query=printf&manpath=FreeBSD+12.0-RELEASE
   https://www.gnu.org/software/coreutils/manual/html_node/printf-invocation.html
 """
-
-
-def print_underlined(s: str):
-    print(f'\u001b[4m{s}\u001b[m')
-
-def demo_color(code: str):
-    print(f'\u001b[{code}m {code.ljust(3)} ', end='')
-
-def demo256color(code: int):
-    print(f' \u001b[38;5;{code}m{str(code).ljust(3)}', end='')
-
-def demo24bitcolor(r,g,b):
-    print(f' \u001b[38;2;{r};{g};{b}mR:{r} G:{g} B:{b}', end='')
-
-
-print_underlined('8-color terminals')
-print('Accessed with \\033[{30..37}m (foreground) and \\033[{40..47}m (background)')
-for i in (3, 4):
-    for j in range(8):
-        demo_color(str(i) + str(j))
-    print('\u001b[m')
-print()
-
-
-print_underlined('16-color terminals')
-print('Accessed with \\033[{90..97}m (foreground) and \\033[{100..107}m (background)')
-# It is said: Prior to the aixterm spec, brighter colors were accessed by using
-#     the colors above combined with the bold text attribute.
-# Default behavior in Terminal.app: same colors in a bolded font. Enable the
-#     'Use bright colors for bold text' option in Preferences->Profiles
-for i in (9, 10):
-    for j in range(8):
-        demo_color(str(i) + str(j))
-    print('\u001b[m')
-print()
-
-
-print_underlined('256-color terminals')
-print('Accessed with \\033[38;5;{0..255}m (fore) and \\033[48;5;{0..255}m (back)')
-print('The 16 colors above, a 6x6x6 cubic colorspace, and a 24-step grayscale gradient')
-# Display the original 16 ANSI colors as 2 rows of 8
-for i in range(2):
-    for j in range(8):
-        demo256color(8*i + j)
-    print()
-
-# The middle 216 colors are arranged as a 6x6x6 cubic RGB colorspace
-# To display it compactly, we display three 6x6 z-slices per row:
-# 2 rows of slices, 6 lines per slice, 3 slices per line, 6 colors per slice 
-for row in range(2):
-    for line in range(6):
-        for z_slice in range(3):
-            for color in range(6):
-                demo256color(16 + 108*row + 6*line + 36*z_slice + color)
-            # add spacing between slices, or a new line after the third slice:
-            print(end='  ' if z_slice<2 else '\n')
-
-# The final 24 colors are a dark-to-light grayscale gradient; display as 2 rows of 12
-for i in range(2):
-    for j in range(12):
-        demo256color(232 + 12*i + j)
-    print()
-print('\u001b[m')
-
-
-print_underlined('24-bit-color terminals')
-print('Accessed with \\033[38;2;<R>;<G>;<B>m (fore) and \\033[48;2;<R>;<G>;<B>m (back)')
-print('Implemented in most modern *nix terminal emulators; not in OS X Terminal.app')
-# TODO: print a couple of lines of smooth gradients as a compact visual test
-# https://github.com/termstandard/colors
-# https://gist.github.com/lifepillar/09a44b8cf0f9397465614e622979107f
-# https://unix.stackexchange.com/questions/404414/print-true-color-24-bit-test-pattern
-# for now, just attempt an off-shade of red, green, and blue, as a quick test:
-demo24bitcolor(192,16,16)
-print(end=' (red)   ')
-demo24bitcolor(16,192,16)
-print(end=' (green)   ')
-demo24bitcolor(16,16,192)
-print(end=' (blue)')
-print('\u001b[m\n')
-
-
-print_underlined('Other graphical control sequences')
-print('Accessed with \\033[{0..9}m')
-print('Zero is the default code, thus \\033[m also resets; six is rarely implemented')
-print(' 0: reset\t1: \u001b[1mbold\u001b[m\t\t2: \u001b[2mdim\u001b[m\t\t'
-       '3: \u001b[3mitalics\u001b[m\t4: \u001b[4munderline\u001b[m')
-print(' 5: \u001b[5mblink\u001b[m\t6: \u001b[6mfast-blink\u001b[m\t'
-       '7: \u001b[7minverse\u001b[m\t8: \u001b[8mhidden\u001b[m\t'
-       '9: \u001b[9mstrike\u001b[m')
