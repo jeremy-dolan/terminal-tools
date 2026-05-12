@@ -1,18 +1,16 @@
 #!/bin/bash
 #
-# ssh-diff - diff -u two files, allowing scp-like SSH paths
+# ssh-diff - diff two files, allowing scp-like paths
 # Author: Jeremy Dolan (2026/04/27)
 
 set -u
 
-prog=${0##*/}
-
 usage() {
     cat >&2 <<EOF
-Usage: $prog FILE1 FILE2
-  diff -u two files, allowing scp-like SSH paths of the form [user@]host:path
-  Filenames containing ':' can be explicitly marked as local by including a '/'
-    in the path before the ':', for example: "./file:name"
+Usage: ssh-diff file1 file2
+    diff two files, allowing scp-like paths of the form [user@]ssh-host:path
+    Filenames containing ':' can be explicitly marked as local by including a
+        '/' in the path before the ':', for example: "./file:name"
 EOF
 }
 
@@ -28,21 +26,24 @@ is_remote() {
     [[ $before_slash == *:* ]]
 }
 
-# Write the contents of $1 to file $2, via ssh if path is remote.
+# Print the path that diff should use for path spec $1, fetching to $2 via ssh if spec is remote.
 fetch() {
     if is_remote "$1"; then
         local host=${1%%:*}
         local path=${1#*:}
-        ssh "$host" cat -- "$(printf '%q' "$path")" > "$2"
+        ssh "$host" cat -- "$(printf '%q' "$path")" > "$2" || return
+        echo "$2"
     else
-        cat -- "$1" > "$2"
+        [ -r "$1" ] || return
+        echo "$1"
     fi
 }
 
 tmp=$(mktemp -d) || exit 3
-trap 'rm -rf "$tmp"' EXIT
+readonly tmp
+trap 'rm -rf -- "$tmp"' EXIT
 
-fetch "$1" "$tmp/a" || { echo "$prog: failed to read $1" >&2; exit 3; }
-fetch "$2" "$tmp/b" || { echo "$prog: failed to read $2" >&2; exit 3; }
+path_1=$(fetch "$1" "$tmp/a") || { echo "${0##*/}: failed to read $1" >&2; exit 3; }
+path_2=$(fetch "$2" "$tmp/b") || { echo "${0##*/}: failed to read $2" >&2; exit 3; }
 
-diff -u --label "$1" --label "$2" "$tmp/a" "$tmp/b"
+diff -u --color=auto --label "$1" --label "$2" "$path_1" "$path_2"
