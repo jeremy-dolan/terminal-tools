@@ -1,6 +1,6 @@
 Some command-line utilities I've written and continue to find useful.
 
-Public domain (under CC0, https://creativecommons.org/publicdomain/zero/1.0/).
+Public domain (under [CC0](https://creativecommons.org/publicdomain/zero/1.0/)).
 Use them however you like.
 
 ### [showcolors](showcolors)
@@ -17,6 +17,13 @@ Diff two files, allowing scp-like paths of the form `[user@]ssh-host:path`.
 % ssh-diff sandbox:dev/file host:deploy/file
 ...
 ```
+
+
+### [odf-diff](odf-diff)
+Diff the content and metadata of two OpenDocument files (.odt, .ods, ...).
+Requires `unzip`, `xmllint` (part of libxml2; bundled with macOS), `diff`, and
+LibreOffice (or an equivalent `soffice` executable)
+
 
 ### [flac2mp3](flac2mp3)
 Convert FLAC files to high-quality VBR MP3. (POSIX sh; requires `ffmpeg`)

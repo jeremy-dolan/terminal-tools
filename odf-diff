@@ -1,0 +1,157 @@
+#!/bin/bash
+#
+# odf-diff - diff the content and metadata of two OpenDocument files
+# requires soffice, unzip, xmllint, diff
+# designed for ODT files; not extensively tested on ODS, conversion could be improved
+# Author: Jeremy Dolan/Anthropic Sonnet 5 (2026/07/02)
+
+set -u
+set -o pipefail
+
+soffice=${SOFFICE:-/Applications/LibreOffice.app/Contents/MacOS/soffice}
+
+if (( $# != 2 )); then
+  echo "usage: odf-diff OLD.odt NEW.odt" >&2
+  exit 2
+fi
+
+old=$1
+new=$2
+
+for file in "$old" "$new"; do
+  if [[ ! -f $file ]]; then
+    echo "odf-diff: file not found: $file" >&2
+    exit 2
+  fi
+done
+
+if [[ ! -x $soffice ]]; then
+  echo "odf-diff: LibreOffice executable not found at:" >&2
+  echo "  $soffice" >&2
+  exit 2
+fi
+
+for cmd in unzip xmllint diff; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "odf-diff: required command not found: $cmd" >&2
+    exit 2
+  fi
+done
+
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/odf-diff.XXXXXX") || exit 2
+trap 'rm -rf -- "$tmpdir"' EXIT INT TERM HUP
+
+mkdir -p \
+  "$tmpdir/xml" \
+  "$tmpdir/text-old" \
+  "$tmpdir/text-new" \
+  "$tmpdir/profile-old" \
+  "$tmpdir/profile-new"
+
+extract_xml() {
+  local source=$1
+  local member=$2
+  local destination=$3
+  unzip -p "$source" "$member" 2>/dev/null | xmllint --format - > "$destination"
+}
+
+convert_to_text() {
+  local source=$1
+  local outdir=$2
+  local profile=$3
+  local -a converted
+
+  "$soffice" \
+    "-env:UserInstallation=file://$profile" \
+    --headless \
+    --convert-to txt \
+    --outdir "$outdir" \
+    "$source" >/dev/null 2>&1 || return 1
+
+  shopt -s nullglob
+  converted=("$outdir"/*.txt)
+  shopt -u nullglob
+
+  if (( ${#converted[@]} != 1 )); then
+    return 1
+  fi
+  REPLY=${converted[0]}
+}
+
+extract_xml "$old" content.xml "$tmpdir/xml/old-content.xml" || {
+  echo "odf-diff: could not extract content.xml from: $old" >&2
+  exit 2
+}
+extract_xml "$new" content.xml "$tmpdir/xml/new-content.xml" || {
+  echo "odf-diff: could not extract content.xml from: $new" >&2
+  exit 2
+}
+
+extract_xml "$old" meta.xml "$tmpdir/xml/old-meta.xml" || {
+  echo "odf-diff: could not extract meta.xml from: $old" >&2
+  exit 2
+}
+extract_xml "$new" meta.xml "$tmpdir/xml/new-meta.xml" || {
+  echo "odf-diff: could not extract meta.xml from: $new" >&2
+  exit 2
+}
+
+echo "odf-diff: soffice: converting $old to text..." >&2
+convert_to_text "$old" "$tmpdir/text-old" "$tmpdir/profile-old" || {
+  echo "odf-diff: LibreOffice could not convert to text: $old" >&2
+  exit 2
+}
+old_text=$REPLY
+
+echo "odf-diff: soffice: converting $new to text..." >&2
+convert_to_text "$new" "$tmpdir/text-new" "$tmpdir/profile-new" || {
+  echo "odf-diff: LibreOffice could not convert to text: $new" >&2
+  exit 2
+}
+new_text=$REPLY
+
+echo
+echo "=== Normalized content.xml ==="
+diff --color=auto -u \
+  -L "$old: content.xml" \
+  -L "$new: content.xml" \
+  "$tmpdir/xml/old-content.xml" \
+  "$tmpdir/xml/new-content.xml"
+xml_status=$?
+if (( xml_status == 0 )); then
+  echo "(no XML differences)"
+fi
+
+echo
+echo
+echo "=== Normalized meta.xml ==="
+diff --color=auto -u \
+  -L "$old: meta.xml" \
+  -L "$new: meta.xml" \
+  "$tmpdir/xml/old-meta.xml" \
+  "$tmpdir/xml/new-meta.xml"
+meta_status=$?
+if (( meta_status == 0 )); then
+  echo "(no meta differences)"
+fi
+
+echo
+echo
+echo "=== LibreOffice plain text ==="
+diff --color=auto -u \
+  -L "$old: extracted text" \
+  -L "$new: extracted text" \
+  "$old_text" \
+  "$new_text"
+text_status=$?
+if (( text_status == 0 )); then
+  echo "(no text differences)"
+fi
+
+if (( xml_status > 1 || meta_status > 1 || text_status > 1 )); then
+  exit 2
+elif (( xml_status == 1 || meta_status == 1 || text_status == 1 )); then
+  exit 1
+else
+  exit 0
+fi
