@@ -1,0 +1,69 @@
+#!/bin/bash
+#
+# xml-diff - diff two XML files after normalizing line breaks and indentation
+# Requires xmllint (part of libxml2; bundled with macOS)
+# This is a line-based diff of the reformatted output, not a semantic XML diff
+# It won't detect cosmetic differences like attribute order and <a/> vs <a></a>
+# Author: Jeremy Dolan/Anthropic Sonnet 5 (2026/07/02)
+
+set -u
+set -o pipefail
+
+if (( $# != 2 )); then
+  echo "usage: xml-diff OLD.xml NEW.xml" >&2
+  exit 2
+fi
+
+old=$1
+new=$2
+
+for file in "$old" "$new"; do
+  if [[ ! -f $file ]]; then
+    echo "xml-diff: file not found: $file" >&2
+    exit 2
+  fi
+done
+
+for cmd in xmllint diff; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "xml-diff: required command not found: $cmd" >&2
+    exit 2
+  fi
+done
+
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/xml-diff.XXXXXX") || exit 2
+trap 'rm -rf -- "$tmpdir"' EXIT INT TERM HUP
+
+format_xml() {
+  local source=$1
+  local destination=$2
+  xmllint --format "$source" > "$destination"
+}
+
+format_xml "$old" "$tmpdir/old.xml" || {
+  echo "xml-diff: could not parse: $old" >&2
+  exit 2
+}
+format_xml "$new" "$tmpdir/new.xml" || {
+  echo "xml-diff: could not parse: $new" >&2
+  exit 2
+}
+
+diff -u --color=auto \
+  -L "$old" \
+  -L "$new" \
+  "$tmpdir/old.xml" \
+  "$tmpdir/new.xml"
+status=$?
+
+if (( status == 0 )); then
+  echo "(no differences)"
+fi
+
+if (( status > 1 )); then
+  exit 2
+elif (( status == 1 )); then
+  exit 1
+else
+  exit 0
+fi

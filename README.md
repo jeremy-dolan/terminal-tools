@@ -25,6 +25,13 @@ Requires `unzip`, `xmllint` (part of libxml2; bundled with macOS), `diff`, and
 LibreOffice (or an equivalent `soffice` executable)
 
 
+### [xml-diff](xml-diff)
+Diff two XML files after normalizing line breaks and indentation.
+This is a line-based diff of the reformatted output, not a semantic XML diff.
+It won't detect cosmetic differences like attribute order and `<a/>` vs `<a></a>`.
+Requires xmllint from libxml2 (bundled with macOS).
+
+
 ### [flac2mp3](flac2mp3)
 Convert FLAC files to high-quality VBR MP3. (POSIX sh; requires `ffmpeg`)
 
