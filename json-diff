@@ -1,0 +1,67 @@
+#!/bin/bash
+#
+# json-diff - diff two JSON files after normalizing whitespace and key order
+# Requires jq (brew install jq on macOS)
+# Author: Jeremy Dolan/Anthropic Sonnet 5 (2026/07/02)
+
+set -u
+set -o pipefail
+
+if (( $# != 2 )); then
+  echo "usage: json-diff OLD.json NEW.json" >&2
+  exit 2
+fi
+
+old=$1
+new=$2
+
+for file in "$old" "$new"; do
+  if [[ ! -f $file ]]; then
+    echo "json-diff: file not found: $file" >&2
+    exit 2
+  fi
+done
+
+for cmd in jq diff; do
+  if ! command -v "$cmd" >/dev/null 2>&1; then
+    echo "json-diff: required command not found: $cmd" >&2
+    exit 2
+  fi
+done
+
+tmpdir=$(mktemp -d "${TMPDIR:-/tmp}/json-diff.XXXXXX") || exit 2
+trap 'rm -rf -- "$tmpdir"' EXIT INT TERM HUP
+
+normalize_json() {
+  local source=$1
+  local destination=$2
+  jq -S . -- "$source" > "$destination"
+}
+
+normalize_json "$old" "$tmpdir/old.json" || {
+  echo "json-diff: could not parse: $old" >&2
+  exit 2
+}
+normalize_json "$new" "$tmpdir/new.json" || {
+  echo "json-diff: could not parse: $new" >&2
+  exit 2
+}
+
+diff -u --color=auto \
+  -L "$old" \
+  -L "$new" \
+  "$tmpdir/old.json" \
+  "$tmpdir/new.json"
+status=$?
+
+if (( status == 0 )); then
+  echo "(no differences)"
+fi
+
+if (( status > 1 )); then
+  exit 2
+elif (( status == 1 )); then
+  exit 1
+else
+  exit 0
+fi

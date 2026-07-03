@@ -29,7 +29,11 @@ LibreOffice (or an equivalent `soffice` executable)
 Diff two XML files after normalizing line breaks and indentation.
 This is a line-based diff of the reformatted output, not a semantic XML diff.
 It won't detect cosmetic differences like attribute order and `<a/>` vs `<a></a>`.
-Requires xmllint from libxml2 (bundled with macOS).
+Requires `xmllint` from libxml2 (bundled with macOS).
+
+
+### [json-diff](json-diff)
+Diff two JSON files after normalizing whitespace and key order. (bash; requires `jq`)
 
 
 ### [flac2mp3](flac2mp3)
