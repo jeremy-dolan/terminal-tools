@@ -8,9 +8,12 @@ set -u
 usage() {
     cat >&2 <<EOF
 Usage: ssh-diff file1 file2
-    diff two files, allowing scp-like paths of the form [user@]ssh-host:path
+    Diff two files, allowing scp-like paths of the form [user@]ssh-host:path
     Filenames containing ':' can be explicitly marked as local by including a
         '/' in the path before the ':', for example: "./file:name"
+    To enable tab-completion of remote paths in zsh, run:
+        compdef ssh-diff=scp
+    or add it to .zshrc after "compinit" (and restart zsh)
 EOF
 }
 
