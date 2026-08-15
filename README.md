@@ -19,20 +19,20 @@ Diff two files, allowing scp-like paths of the form `[user@]ssh-host:path`.
 ```
 
 
-### [odf-diff](odf-diff)
+### [diff-odf](diff-odf)
 Diff the content and metadata of two OpenDocument files (.odt, .ods, ...).
 Requires `unzip`, `xmllint` (part of libxml2; bundled with macOS), `diff`, and
 LibreOffice (or an equivalent `soffice` executable)
 
 
-### [xml-diff](xml-diff)
+### [diff-xml](diff-xml)
 Diff two XML files after normalizing line breaks and indentation.
 This is a line-based diff of the reformatted output, not a semantic XML diff.
 It won't detect cosmetic differences like attribute order and `<a/>` vs `<a></a>`.
 Requires `xmllint` from libxml2 (bundled with macOS).
 
 
-### [json-diff](json-diff)
+### [diff-json](diff-json)
 Diff two JSON files after normalizing whitespace and key order. (bash; requires `jq`)
 
 
