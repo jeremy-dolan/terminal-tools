@@ -1,0 +1,2 @@
+#compdef ssh-diff=scp  # treat my ssh-diff script as if it uses same args as scp... close enough
+
