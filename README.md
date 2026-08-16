@@ -23,6 +23,12 @@ Diff two files, allowing scp-like paths of the form `[user@]ssh-host:path`.
 ```
 
 
+### [diff-json](bin/diff-json)
+Diff two JSON files after normalizing whitespace and key order. (bash; requires `jq`)
+
+![diff-json vs. diff comparison](assets/diff-json.png)
+
+
 ### [diff-odf](bin/diff-odf)
 Diff the content and metadata of two OpenDocument files (.odt, .ods, ...).
 Requires `unzip`, `xmllint` (part of libxml2; bundled with macOS), `diff`, and
@@ -34,10 +40,6 @@ Diff two XML files after normalizing line breaks and indentation.
 This is a line-based diff of the reformatted output, not a semantic XML diff.
 It won't detect cosmetic differences like attribute order and `<a/>` vs `<a></a>`.
 Requires `xmllint` from libxml2 (bundled with macOS).
-
-
-### [diff-json](bin/diff-json)
-Diff two JSON files after normalizing whitespace and key order. (bash; requires `jq`)
 
 
 ### [flac2mp3](bin/flac2mp3)
