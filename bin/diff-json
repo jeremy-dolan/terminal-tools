@@ -1,6 +1,7 @@
 #!/bin/bash
 #
-# json-diff - diff two JSON files after normalizing whitespace and key order
+# json-diff
+# Diff two JSON files after normalizing formatting, key order, string escapes
 # Requires jq (brew install jq on macOS)
 # Author: Jeremy Dolan/Anthropic Sonnet 5 (2026/07/02)
 

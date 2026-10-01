@@ -2,19 +2,14 @@
 
 TITLE="flac2mp3"
 DESCR="convert flac files to high-quality VBR mp3"
-AUTHR="Jeremy Dolan"
-USAGE="Usage: flac2mp3 file1.flac [file2.flac ...]"
-NOTE1="Note: most metadata is preserved, with the notable exception of lyrics"
-NOTE2="      input file(s) must all end in '.flac'"
-NOTE3="      output is to the corresondingly named '.mp3' file(s)"
+# Author: Jeremy Dolan <https://jeremydolan.net>
+USAGE="Usage: flac2mp3 file1.flac [file2.flac ...]
+Note: most metadata is preserved, with the notable exception of lyrics
+      input file(s) must end in '.flac'
+      output is to the corresondingly named '.mp3' file(s)"
 
 # Last updated 2022.11.22 for ffmpeg 5.1.2
-# This work is public domain. The author hereby releases all copyright. «jd»
-# This software is provided free and "as is", without warranties of any kind,
-# express or implied, including but not limited to the warranties of fitness
-# for a particular purpose or merchantability. In no event shall the author be
-# liable for any damages arising in any way out of the use of this software.
-
+# This work is public domain. The author hereby releases all copyright.
 
 # ** NOTE ON LYRICS METADATA DATA LOSS **
 # !! LYRICS DATA IN FLAC FILES ARE NOT PROPERLY ADDED TO MP3 FILES !!
@@ -34,10 +29,7 @@ NOTE3="      output is to the corresondingly named '.mp3' file(s)"
 ### usage ###
 if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
     echo "$TITLE - $DESCR"
-    echo "$USAGE"
-    echo "$NOTE1"
-    echo "$NOTE2"
-    echo "$NOTE3"
+    printf '%s\n' "$USAGE"
     exit 0
 fi
 
@@ -81,7 +73,6 @@ for f in "$@"; do
             ffmpeg -i   "$f"   $FLAGS   "${f%.flac}.mp3"
     echo
 done
-
 
 ### fin ###
 
